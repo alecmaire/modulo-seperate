@@ -112,10 +112,11 @@ def run_training_loop(args):
     test_dataset = AudioDataset(args.dataset, segment_duration=args.segment_duration, phase='test')
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False)
 
+    running_sdr = {'bass': 0.0, 'drums': 0.0, 'other': 0.0, 'vocals': 0.0}
+
     for epoch in range(args.num_epochs):
         model.train()
         running_loss = 0.0
-        running_sdr = {stem: 0.0 for stem in ['bass', 'drums', 'other', 'vocals']}
         
         # Wrap train_loader with tqdm for progress tracking
         for i, (inputs, targets) in enumerate(tqdm(train_loader, desc=f"Epoch {epoch+1}")):
@@ -124,56 +125,54 @@ def run_training_loop(args):
             #outputs = model(inputs)
 
             #loss = criterion(outputs, targets)
-            loss = model(inputs, target=targets)  # Compute the loss internally in the model
+            loss, outputs = model(inputs, target=targets)  # Compute the loss internally in the model
             loss.backward()
             optimizer.step()
             running_loss += loss.item()
             print(f"[Epoch {epoch+1}, Step {i+1}] Loss: {loss.item()}")
 
-            # Accumulate the SDR every 100 steps instead of every step
-            if i % 100 == 99:
+            # Accumulate the SDR every 10 steps instead of every step
+            if i % 10 == 9:
                 sdr_scores = new_sdr(targets, outputs)
                 for stem_idx, stem in enumerate(['bass', 'drums', 'other', 'vocals']):
                     running_sdr[stem] += sdr_scores[:, stem_idx].mean().item()  # Accumulate the SDRs of all stems
-                
-            # Log the loss and SDR every 100 steps
-            if i % 100 == 99:
-                avg_loss = running_loss / 100
+                    
+            # Log the loss and SDR every 10 steps
+            if i % 10 == 9:
+                avg_loss = running_loss / 10
                 print(f"[Epoch {epoch+1}, Step {i+1}] Loss: {avg_loss}")
-                
-                avg_sdr_value = sum(running_sdr.values()) / 4  # Calculating the average SDR from the running_sdr dictionary before resetting.
-                print(f"[Epoch {epoch+1}, Step {i+1}] Average SDR: {avg_sdr_value}")  # Average SDR per stem
-                
-                # Log the average SDR and reset for the next 100 steps
+                    
+                # Log the average SDR and reset for the next 10 steps
                 for stem in ['bass', 'drums', 'other', 'vocals']:
-                    avg_sdr = running_sdr[stem] / 25  # Since SDR is calculated every 100 steps, divide by 25 to get average per step
+                    avg_sdr = running_sdr[stem] / 10  # Since SDR is calculated every 10 steps
                     print(f"[Epoch {epoch+1}, Step {i+1}] {stem.capitalize()} SDR: {avg_sdr}")
-                    running_sdr[stem] = 0.0  # Reset running SDR for the next 100 steps
-                
-                running_loss = 0.0  # Reset running loss for the next 100 steps
+                    running_sdr[stem] = 0.0  # Reset running SDR for the next 10 steps
+                    
+                running_loss = 0.0  # Reset running loss for the next 10 steps
                 
         # Validation and Metric Logging
         model.eval()
         val_loss = 0.0
-        val_sdr = 0.0  # Initialize a variable to store SDR for validation
+        val_sdr = {'bass': 0.0, 'drums': 0.0, 'other': 0.0, 'vocals': 0.0}  # Initialize SDR for validation
         with torch.no_grad():
             for inputs, targets in test_loader:
                 inputs, targets = inputs.to(device), targets.to(device)  # Move inputs and targets to the appropriate device
                 #outputs = model(inputs)
                 #loss = criterion(outputs, targets)
-                loss = model(inputs, target=targets)  # Compute the loss internally in the model
+                loss, outputs = model(inputs, target=targets) # Compute the loss internally in the model
                 val_loss += loss.item()
                 
-                # Calculate SDR for each stem and log it.
                 sdr_scores = new_sdr(targets, outputs)
-                print("SDR Scores Shape: ", sdr_scores.shape)  
-                for i, stem in enumerate(['bass', 'drums', 'other', 'vocals']):
-                    stem_sdr = sdr_scores[i].mean().item()  # Assuming the SDR is calculated per sample in the batch and needs to be averaged
-                    print(f"[Epoch {epoch+1}] Validation {stem.capitalize()} SDR: {stem_sdr}")
-                    val_sdr += stem_sdr  # Sum up the SDRs of all stems
+                for stem_idx, stem in enumerate(['bass', 'drums', 'other', 'vocals']):
+                    stem_sdr = sdr_scores[:, stem_idx].mean().item()  # Assuming the SDR is calculated per sample in the batch and needs to be averaged
+                    val_sdr[stem] += stem_sdr  # Accumulate the SDRs of all stems
 
+        # Log the validation metrics
         print(f"[Epoch {epoch+1}] Validation Loss: {val_loss / len(test_loader)}")
-        print(f"[Epoch {epoch+1}] Average Validation SDR: {val_sdr / (4 * len(test_loader))}")  # Average SDR per stem per batch
+        for stem in ['bass', 'drums', 'other', 'vocals']:
+            avg_val_sdr = val_sdr[stem] / len(test_loader)
+            print(f"[Epoch {epoch+1}] Validation {stem.capitalize()} SDR: {avg_val_sdr}")
+
         
         if (epoch + 1) % args.save_every == 0:
             # Check if save directory exists; if not, create it

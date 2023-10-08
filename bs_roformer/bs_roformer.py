@@ -332,6 +332,10 @@ class BSRoformer(Module):
         d - feature dimension
         """
 
+        if not exists(target):
+            return recon_audio
+
+
         if raw_audio.ndim == 2:
             raw_audio = rearrange(raw_audio, 'b t -> b 1 t')
 
@@ -437,6 +441,6 @@ class BSRoformer(Module):
         total_loss =  loss + weighted_multi_resolution_loss
 
         if not return_loss_breakdown:
-            return total_loss
+            return total_loss, recon_audio  # Return the loss and the estimated audio
 
-        return total_loss, (loss, multi_stft_resolution_loss)
+        return total_loss, (loss, multi_stft_resolution_loss), recon_audio
