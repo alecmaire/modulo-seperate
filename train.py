@@ -120,7 +120,7 @@ def run_training_loop(args):
         
         # Wrap train_loader with tqdm for progress tracking
         for i, (inputs, targets) in enumerate(tqdm(train_loader, desc=f"Epoch {epoch+1}")):
-            inputs, targets = inputs.to(device), targets.to(device)  # Move inputs and targets to the appropriate device
+            inputs, targets = inputs.half().to(device), targets.half().to(device)  # Convert inputs and targets to Half and move them to the appropriate device
             optimizer.zero_grad()
             #outputs = model(inputs)
 
@@ -156,7 +156,7 @@ def run_training_loop(args):
         val_sdr = {'bass': 0.0, 'drums': 0.0, 'other': 0.0, 'vocals': 0.0}  # Initialize SDR for validation
         with torch.no_grad():
             for inputs, targets in test_loader:
-                inputs, targets = inputs.to(device), targets.to(device)  # Move inputs and targets to the appropriate device
+                inputs, targets = inputs.half().to(device), targets.half().to(device)  # Convert inputs and targets to Half and move them to the appropriate device
                 #outputs = model(inputs)
                 #loss = criterion(outputs, targets)
                 loss, outputs = model(inputs, target=targets) # Compute the loss internally in the model
